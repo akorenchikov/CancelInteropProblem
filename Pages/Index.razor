@@ -1,0 +1,53 @@
+﻿@page "/{interopCase?}"
+@using System.Text.Json
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+<h3 @ref=@headerRef>UncatchableException</h3>
+<p>@responseStr</p>
+@code {
+    public class BoundingBox {
+        public int Top { get; set; }
+        public int Left { get; set; }
+        public int Right { get; set; }
+        public int Bottom { get; set; }
+    }
+    [Parameter] public string InteropCase { get; set; }
+    ElementReference headerRef;
+    string responseStr;
+    protected override void OnParametersSet() {
+        InteropCase ??= nameof(InteropCancelBug);
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender) {
+                try {
+                    _ = await (InteropCase switch {
+                        nameof(InteropCancelBug) => InteropCancelBug(),
+                        nameof(InteropCancelBug_Workaround) => InteropCancelBug_Workaround(),
+                        _ => throw new NotSupportedException()
+                    });
+                } catch(TaskCanceledException) {
+                    responseStr = "TaskCanceledException occured";
+                    StateHasChanged();
+                }
+        }
+    }
+
+    async Task<BoundingBox> InteropCancelBug()
+    {
+        using (var cts = new CancellationTokenSource())
+        {
+            cts.CancelAfter(100);
+            return await JSRuntime.InvokeAsync<BoundingBox>("delayedOp", cts.Token, headerRef);
+        }
+    }
+
+    async Task<BoundingBox> InteropCancelBug_Workaround()
+    {
+        using (var cts = new CancellationTokenSource())
+        {
+            cts.CancelAfter(100);
+            return JsonSerializer.Deserialize<BoundingBox>(await JSRuntime.InvokeAsync<string>("delayedOpWA", cts.Token, headerRef));
+        }
+    }
+}
